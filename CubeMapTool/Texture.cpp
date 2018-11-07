@@ -23,7 +23,8 @@ GLuint CreateTexture2D(IMAGE *pImage)
 	glBindTexture(GL_TEXTURE_2D, texture);
 	{
 		FlipImage(pImage);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMAGE_WIDTH(pImage), IMAGE_HEIGHT(pImage), 0, GL_BGR, GL_UNSIGNED_BYTE, pImage->data);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, IMAGE_BITCOUNT(pImage) == 24? GL_RGB : GL_RGBA, IMAGE_WIDTH(pImage), IMAGE_HEIGHT(pImage), 0, IMAGE_BITCOUNT(pImage) == 24 ? GL_BGR : GL_BGRA, GL_UNSIGNED_BYTE, pImage->data);
 		FlipImage(pImage);
 	}
 	glBindTexture(GL_TEXTURE_2D, 0);

@@ -1,7 +1,7 @@
 #include "stdafx.h"
 
 
-BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int samples)
+BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int samples, bool isHDR)
 {
 	static const GLchar *szShaderVertexCode =
 		"                                                                                           \n\
@@ -29,6 +29,7 @@ BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int sam
 																									\n\
 			uniform uint _samples;                                                                  \n\
 			uniform float _roughness;                                                               \n\
+			uniform int _hdrMap;																	\n\
 			uniform sampler2D _envmap;                                                              \n\
 																									\n\
 			varying vec4 texcoord;                                                                  \n\
@@ -43,6 +44,20 @@ BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int sam
 				return float(bits) * 2.3283064365386963e-10;                                        \n\
 			}                                                                                       \n\
 																									\n\
+			#define RGBMMaxValue 10.0																\n\
+																									\n\
+			vec3 RGBMDecode(vec4 color)																\n\
+			{																						\n\
+				return vec3(color.rgb) * color.a * RGBMMaxValue;									\n\
+			}																						\n\
+																									\n\
+			vec4 EncodeRGBM(vec3 rgb)																\n\
+			{																						\n\
+				float maxRGB = max(rgb.x, max(rgb.g, rgb.b));										\n\
+				float M = maxRGB / RGBMMaxValue;													\n\
+				M = ceil(M * 255.0) / 255.0;														\n\
+				return vec4(rgb / (M * RGBMMaxValue), M);											\n\
+			}																						\n\
 			vec2 Hammersley(uint i, uint n)                                                         \n\
 			{                                                                                       \n\
 				return vec2(1.0f * i / n, RadicalInverse(i));                                       \n\
@@ -107,7 +122,9 @@ BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int sam
 					float ndotl = max(dot(N, L), 0.0f);                                             \n\
 																									\n\
 					if (ndotl > 0.0f) {                                                             \n\
-						color += pow(texture(envmap, uv).rgb, vec3(1.0f / 2.2f)) * ndotl;           \n\
+						vec4 texColor = texture(envmap, uv);										\n\
+						texColor.rgb = _hdrMap > 0.5 ? RGBMDecode(texColor) : texColor.rgb;			\n\
+						color += pow(texColor.rgb, vec3(1.0f / 2.2f)) * ndotl;						\n\
 						weight += ndotl;                                                            \n\
 					}                                                                               \n\
 				}                                                                                   \n\
@@ -120,8 +137,9 @@ BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int sam
 			{                                                                                       \n\
 				vec3 direction = SphericalToDirection(texcoord.xy);                                 \n\
 				direction = normalize(direction);                                                   \n\
-				gl_FragColor.rgb = Sampling(_envmap, direction, _roughness, _samples);              \n\
-				gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(2.2f));                               \n\
+				vec3 color = Sampling(_envmap, direction, _roughness, _samples);					\n\
+				color = pow(color, vec3(2.2f));														\n\
+				gl_FragColor.rgba = _hdrMap > 0.5 ? EncodeRGBM(color) : vec4(color, 1.0);			\n\
 			}                                                                                       \n\
 		";
 
@@ -170,9 +188,10 @@ BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int sam
 						glUniform1f(uniformLocationRoughness, mipLevel / (mipLevels - 1.0f));
 						glUniform1ui(uniformLocationSamples, samples);
 						glUniform1i(uniformLocationEnvmap, 0);
+						glUniform1i(uniformLocationHDRmap, (int)isHDR);
 
 						glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, NULL);
-						glReadPixels(0, 0, IMAGE_WIDTH(&pMipmaps[mipLevel]), IMAGE_HEIGHT(&pMipmaps[mipLevel]), GL_BGR, GL_UNSIGNED_BYTE, pMipmaps[mipLevel].data);
+						glReadPixels(0, 0, IMAGE_WIDTH(&pMipmaps[mipLevel]), IMAGE_HEIGHT(&pMipmaps[mipLevel]), GL_BGRA, GL_UNSIGNED_BYTE, pMipmaps[mipLevel].data);
 					}
 					glDisableVertexAttribArray(attribLocationPosition);
 					glDisableVertexAttribArray(attribLocationTexcoord);
@@ -200,7 +219,7 @@ RET:
 }
 
 
-BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int samples)
+BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int samples, bool isHDR)
 {
 	static const GLchar *szShaderVertexCode =
 		"                                                                                           \n\
@@ -227,6 +246,7 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 			#define PI 3.1415926535897932384626433832795f                                           \n\
 																									\n\
 			uniform uint _samples;                                                                  \n\
+			uniform int _hdrMap;																	\n\
 			uniform float _roughness;                                                               \n\
 			uniform sampler2D _envmap;                                                              \n\
 																									\n\
@@ -241,6 +261,20 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 				bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);                 \n\
 				return float(bits) * 2.3283064365386963e-10;                                        \n\
 			}                                                                                       \n\
+			#define RGBMMaxValue 10.0																\n\
+																									\n\
+			vec3 RGBMDecode(vec4 color)																\n\
+			{																						\n\
+				return vec3(color.rgb) * color.a * RGBMMaxValue;									\n\
+			}																						\n\
+																									\n\
+			vec4 EncodeRGBM(vec3 rgb)																\n\
+			{																						\n\
+				float maxRGB = max(rgb.x, max(rgb.g, rgb.b));										\n\
+				float M = maxRGB / RGBMMaxValue;													\n\
+				M = ceil(M * 255.0) / 255.0;														\n\
+				return vec4(rgb / (M * RGBMMaxValue), M);											\n\
+			}																						\n\
 																									\n\
 			vec2 Hammersley(uint i, uint n)                                                         \n\
 			{                                                                                       \n\
@@ -258,24 +292,10 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 				return uv;                                                                          \n\
 			}                                                                                       \n\
 																									\n\
-			vec3 SphericalToDirection(vec2 uv)													    \n\
-			{                                                                                       \n\
-				vec2 invAtan = vec2(2.0 * PI, 1.0 * PI);                                            \n\
-				uv -= 0.5;                                                                          \n\
-				uv *= invAtan;                                                                      \n\
-																									\n\
-				float x = sin(uv.x); 																\n\
-				float y = sin(uv.y); 																\n\
-				float z = cos(uv.x); 																\n\
-				float a = sqrt((1.0 - y * y) / (x * x + z * z)); 									\n\
-																									\n\
-				return vec3(x * a, y, z * a);                                                       \n\
-			}                                                                                       \n\
-																									\n\
 			vec3 AdvanceSphereToDirection(vec2 uv)													\n\
 			{                                                                                       \n\
 				uv = uv - 0.5;																		\n\
-                //uv = length(uv) > 0.5 ? normalize(uv) * 0.5 : uv;                                 \n\
+                uv = length(uv) > 0.5 ? normalize(uv) * 0.5 : uv;									\n\
                 vec3 p = vec3(0.0);                                                                 \n\
                 vec3 ray = vec3(0.0);                                                               \n\
                 float t = 2.0* uv.y;                                                                \n\
@@ -325,7 +345,9 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 					float ndotl = max(dot(N, L), 0.0f);                                             \n\
 																									\n\
 					if (ndotl > 0.0f) {                                                             \n\
-						color += pow(texture(envmap, uv).rgb, vec3(1.0f / 2.2f)) * ndotl;           \n\
+						vec4 texColor = texture(envmap, uv);										\n\
+						texColor.rgb = _hdrMap > 0.5 ? RGBMDecode(texColor) : texColor.rgb;			\n\
+						color += pow(texColor.rgb, vec3(1.0f / 2.2f)) * ndotl;						\n\
 						weight += ndotl;                                                            \n\
 					}                                                                               \n\
 				}                                                                                   \n\
@@ -338,8 +360,9 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 			{                                                                                       \n\
                 vec3 direction = AdvanceSphereToDirection(texcoord.xy);                             \n\
 				direction = normalize(direction);                                                   \n\
-				gl_FragColor.rgb = Sampling(_envmap, direction, _roughness, _samples);              \n\
-				gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(2.2f));                               \n\
+				vec3 color = Sampling(_envmap, direction, _roughness, _samples);					\n\
+				color = pow(color, vec3(2.2f));														\n\
+				gl_FragColor.rgba = _hdrMap > 0.5 ? EncodeRGBM(color) : vec4(color, 1.0);			\n\
 			}                                                                                       \n\
 		";
 
@@ -388,9 +411,10 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 						glUniform1f(uniformLocationRoughness, mipLevel / (mipLevels - 1.0f));
 						glUniform1ui(uniformLocationSamples, samples);
 						glUniform1i(uniformLocationEnvmap, 0);
+						glUniform1i(uniformLocationHDRmap, (int)isHDR);
 
 						glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, NULL);
-						glReadPixels(0, 0, IMAGE_WIDTH(&pMipmaps[mipLevel]), IMAGE_HEIGHT(&pMipmaps[mipLevel]), GL_BGR, GL_UNSIGNED_BYTE, pMipmaps[mipLevel].data);
+						glReadPixels(0, 0, IMAGE_WIDTH(&pMipmaps[mipLevel]), IMAGE_HEIGHT(&pMipmaps[mipLevel]), GL_BGRA, GL_UNSIGNED_BYTE, pMipmaps[mipLevel].data);
 					}
 					glDisableVertexAttribArray(attribLocationPosition);
 					glDisableVertexAttribArray(attribLocationTexcoord);
@@ -575,7 +599,7 @@ BOOL GenerateCubeMipmaps(CUBEMAP *pCubeMap, CUBEMAP pMipmaps[], int mipLevels, i
 						{
 							glUniformMatrix4fv(uniformLocationTexcoordMatrix, 1, GL_FALSE, (const float *)&matTexcoords[index]);
 							glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, NULL);
-							glReadPixels(0, 0, CUBEMAP_WIDTH(&pMipmaps[mipLevel]), CUBEMAP_HEIGHT(&pMipmaps[mipLevel]), GL_BGR, GL_UNSIGNED_BYTE, pMipmaps[mipLevel].faces[index].data);
+							glReadPixels(0, 0, CUBEMAP_WIDTH(&pMipmaps[mipLevel]), CUBEMAP_HEIGHT(&pMipmaps[mipLevel]), GL_BGRA, GL_UNSIGNED_BYTE, pMipmaps[mipLevel].faces[index].data);
 						}
 					}
 					glDisableVertexAttribArray(attribLocationPosition);

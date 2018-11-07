@@ -14,7 +14,7 @@ BOOL CreateFBO(int width, int height)
 
 	glGenTextures(1, &fboTexture);
 	glBindTexture(GL_TEXTURE_2D, fboTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, fboTextureWidth, fboTextureHeight, 0, GL_BGR, GL_UNSIGNED_BYTE, 0);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, fboTextureWidth, fboTextureHeight, 0, GL_BGRA, GL_UNSIGNED_BYTE, 0);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glBindTexture(GL_TEXTURE_2D, 0);
