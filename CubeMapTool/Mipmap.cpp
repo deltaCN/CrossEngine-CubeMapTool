@@ -219,7 +219,7 @@ RET:
 }
 
 
-BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int samples, bool isHDR)
+BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int samples, bool isHDR, bool isBM)
 {
 	static const GLchar *szShaderVertexCode =
 		"                                                                                           \n\
@@ -247,6 +247,7 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 																									\n\
 			uniform uint _samples;                                                                  \n\
 			uniform int _hdrMap;																	\n\
+			uniform int _isBM;																		\n\
 			uniform float _roughness;                                                               \n\
 			uniform sampler2D _envmap;                                                              \n\
 																									\n\
@@ -265,7 +266,10 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 																									\n\
 			vec3 RGBMDecode(vec4 color)																\n\
 			{																						\n\
-				return vec3(color.rgb) * color.a * RGBMMaxValue;									\n\
+				if(_isBM == 1)																		\n\
+					return vec3(color.r, color.g, color.b * color.a * RGBMMaxValue);				\n\
+				else																				\n\
+					return vec3(color.rgb) * color.a * RGBMMaxValue;								\n\
 			}																						\n\
 																									\n\
 			vec4 EncodeRGBM(vec3 rgb)																\n\
@@ -412,6 +416,7 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 						glUniform1ui(uniformLocationSamples, samples);
 						glUniform1i(uniformLocationEnvmap, 0);
 						glUniform1i(uniformLocationHDRmap, (int)isHDR);
+						glUniform1i(uniformLocationIsBM, (int)isBM);
 
 						glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, NULL);
 						glReadPixels(0, 0, IMAGE_WIDTH(&pMipmaps[mipLevel]), IMAGE_HEIGHT(&pMipmaps[mipLevel]), GL_BGRA, GL_UNSIGNED_BYTE, pMipmaps[mipLevel].data);
