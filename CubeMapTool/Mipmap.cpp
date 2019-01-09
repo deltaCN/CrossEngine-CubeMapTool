@@ -1,7 +1,7 @@
 #include "stdafx.h"
 
 
-BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int samples, bool isHDR)
+BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int samples, bool isHDR, bool isBM)
 {
 	static const GLchar *szShaderVertexCode =
 		"                                                                                           \n\
@@ -30,6 +30,7 @@ BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int sam
 			uniform uint _samples;                                                                  \n\
 			uniform float _roughness;                                                               \n\
 			uniform int _hdrMap;																	\n\
+			uniform int _isBM;																		\n\
 			uniform sampler2D _envmap;                                                              \n\
 																									\n\
 			varying vec4 texcoord;                                                                  \n\
@@ -44,19 +45,32 @@ BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int sam
 				return float(bits) * 2.3283064365386963e-10;                                        \n\
 			}                                                                                       \n\
 																									\n\
-			#define RGBMMaxValue 10.0																\n\
+			#define RGBMMaxValue 16.0																\n\
 																									\n\
 			vec3 RGBMDecode(vec4 color)																\n\
 			{																						\n\
-				return vec3(color.rgb) * color.a * RGBMMaxValue;									\n\
+				if(_isBM == 1)																		\n\
+					return vec3(color.r, color.g, color.b * color.a * RGBMMaxValue);				\n\
+				else																				\n\
+					return vec3(color.rgb) * color.a * RGBMMaxValue;								\n\
 			}																						\n\
 																									\n\
 			vec4 EncodeRGBM(vec3 rgb)																\n\
 			{																						\n\
-				float maxRGB = max(rgb.x, max(rgb.g, rgb.b));										\n\
-				float M = maxRGB / RGBMMaxValue;													\n\
-				M = ceil(M * 255.0) / 255.0;														\n\
-				return vec4(rgb / (M * RGBMMaxValue), M);											\n\
+				if(_isBM == 1)																		\n\
+				{																					\n\
+					float hdrChangle = rgb.b;														\n\
+					float M = hdrChangle / RGBMMaxValue;											\n\
+					M = ceil(M * 255.0) / 255.0;													\n\
+					return vec4(rgb.r, rgb.g, rgb.b / (M * RGBMMaxValue), M);						\n\
+				}																					\n\
+				else																				\n\
+				{																					\n\
+					float maxRGB = max(rgb.x, max(rgb.g, rgb.b));									\n\
+					float M = maxRGB / RGBMMaxValue;												\n\
+					M = ceil(M * 255.0) / 255.0;													\n\
+					return vec4(rgb / (M * RGBMMaxValue), M);										\n\
+				}																					\n\
 			}																						\n\
 			vec2 Hammersley(uint i, uint n)                                                         \n\
 			{                                                                                       \n\
@@ -189,6 +203,7 @@ BOOL GenerateEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, int sam
 						glUniform1ui(uniformLocationSamples, samples);
 						glUniform1i(uniformLocationEnvmap, 0);
 						glUniform1i(uniformLocationHDRmap, (int)isHDR);
+						glUniform1i(uniformLocationIsBM, (int)isBM);
 
 						glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, NULL);
 						glReadPixels(0, 0, IMAGE_WIDTH(&pMipmaps[mipLevel]), IMAGE_HEIGHT(&pMipmaps[mipLevel]), GL_BGRA, GL_UNSIGNED_BYTE, pMipmaps[mipLevel].data);
@@ -262,7 +277,7 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 				bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);                 \n\
 				return float(bits) * 2.3283064365386963e-10;                                        \n\
 			}                                                                                       \n\
-			#define RGBMMaxValue 10.0																\n\
+			#define RGBMMaxValue 16.0																\n\
 																									\n\
 			vec3 RGBMDecode(vec4 color)																\n\
 			{																						\n\
@@ -274,10 +289,20 @@ BOOL GenerateSphereEnvMipmaps(IMAGE *pEnvMap, IMAGE pMipmaps[], int mipLevels, i
 																									\n\
 			vec4 EncodeRGBM(vec3 rgb)																\n\
 			{																						\n\
-				float maxRGB = max(rgb.x, max(rgb.g, rgb.b));										\n\
-				float M = maxRGB / RGBMMaxValue;													\n\
-				M = ceil(M * 255.0) / 255.0;														\n\
-				return vec4(rgb / (M * RGBMMaxValue), M);											\n\
+				if(_isBM == 1)																		\n\
+				{																					\n\
+					float hdrChangle = rgb.b;														\n\
+					float M = hdrChangle / RGBMMaxValue;											\n\
+					M = ceil(M * 255.0) / 255.0;													\n\
+					return vec4(rgb.r, rgb.g, rgb.b / (M * RGBMMaxValue), M);						\n\
+				}																					\n\
+				else																				\n\
+				{																					\n\
+					float maxRGB = max(rgb.x, max(rgb.g, rgb.b));									\n\
+					float M = maxRGB / RGBMMaxValue;												\n\
+					M = ceil(M * 255.0) / 255.0;													\n\
+					return vec4(rgb / (M * RGBMMaxValue), M);										\n\
+				}																					\n\
 			}																						\n\
 																									\n\
 			vec2 Hammersley(uint i, uint n)                                                         \n\
